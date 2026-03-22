@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-jose[cryptography]
+passlib[bcrypt]
+opencv-python-headless
+numpy
+python-dotenv
+httpx
+python-multipart
+pillow
