@@ -79,7 +79,7 @@ def detect_from_image_bytes(image_bytes):
             faces = face_cascade.detectMultiScale(
                 gray,
                 scaleFactor=1.1,
-                minNeighbors=5,
+                minNeighbors=8,
                 minSize=(30, 30)
             )
 
@@ -89,7 +89,7 @@ def detect_from_image_bytes(image_bytes):
             upper = upper_cascade.detectMultiScale(
                 gray,
                 scaleFactor=1.1,
-                minNeighbors=3,
+                minNeighbors=6,
                 minSize=(60, 60)
             )
 
