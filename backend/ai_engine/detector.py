@@ -38,7 +38,7 @@ def detect_from_image_bytes(image_bytes):
         try:
             from ultralytics import YOLO
             model = YOLO("yolov8n.pt")
-            results = model(img_bgr, classes=[0], verbose=False)
+            results = model(img_bgr, classes=[0], conf=0.5, verbose=False)
             for r in results:
                 count = len(r.boxes)
                 for box in r.boxes:
@@ -56,17 +56,35 @@ def detect_from_image_bytes(image_bytes):
                     )
         except Exception as yolo_err:
             print(f"YOLO not available: {yolo_err}")
+            # ✅ FIXED HOG - less false detections
             hog = cv2.HOGDescriptor()
             hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+
+            # Resize image - HOG works better on smaller images
+            height, width = img_bgr.shape[:2]
+            scale = 1.0
+            if width > 800:
+                scale = 800 / width
+                img_bgr = cv2.resize(img_bgr, (int(width * scale), int(height * scale)))
+                annotated = img_bgr.copy()
+
             gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
             boxes, weights = hog.detectMultiScale(
                 gray,
-                winStride=(8, 8),
-                padding=(4, 4),
-                scale=1.05
+                winStride=(12, 12),   # ✅ bigger stride = less false detections
+                padding=(8, 8),
+                scale=1.08,           # ✅ less scales = faster + accurate
+                finalThreshold=2      # ✅ higher threshold = removes false boxes
             )
-            count = len(boxes)
-            for (x, y, w, h) in boxes:
+
+            # ✅ Filter only high confidence detections
+            real_boxes = []
+            for i, (x, y, w, h) in enumerate(boxes):
+                if len(weights) > i and weights[i] > 0.5:
+                    real_boxes.append((x, y, w, h))
+
+            count = len(real_boxes)
+            for (x, y, w, h) in real_boxes:
                 cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
         cv2.putText(
@@ -92,7 +110,7 @@ def detect_from_image_bytes(image_bytes):
 
     except Exception as e:
         print(f"Detection error: {e}")
-        count = random.randint(3, 50)
+        count = 0  # ✅ Return 0 instead of random number on error
         density = get_density_level(count)
         return {
             "count": count,
