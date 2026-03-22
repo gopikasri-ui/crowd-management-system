@@ -1,6 +1,26 @@
 import { useState } from "react";
 import axios from "axios";
 
+const compressImage = (file) => {
+  return new Promise((resolve) => {
+    const canvas = document.createElement("canvas");
+    const img = new window.Image();
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+      if (width > 640) {
+        height = (640 / width) * height;
+        width = 640;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.7);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+};
+
 export default function UploadDetect() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -30,6 +50,8 @@ export default function UploadDetect() {
           setLoading(false);
           return;
         }
+      } else {
+        fileToSend = await compressImage(file);
       }
 
       const formData = new FormData();
@@ -38,7 +60,10 @@ export default function UploadDetect() {
       const res = await axios.post(
         "https://crowd-backend-0m8x.onrender.com/api/crowd/detect/image",
         formData,
-        { headers: { "Content-Type": "multipart/form-data" } }
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+          timeout: 30000
+        }
       );
 
       setResult(res.data);
@@ -58,7 +83,7 @@ export default function UploadDetect() {
       }
     } catch (err) {
       console.error("Upload error:", err);
-      setError("Detection failed. Make sure backend is running on port 8000.");
+      setError("Detection failed. Make sure backend is running.");
     } finally {
       setLoading(false);
     }
@@ -78,7 +103,7 @@ export default function UploadDetect() {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         canvas.toBlob((blob) => {
           resolve(blob);
-        }, "image/jpeg", 0.9);
+        }, "image/jpeg", 0.7);
       };
       video.onerror = () => resolve(null);
     });
@@ -86,7 +111,6 @@ export default function UploadDetect() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
       <div className="bg-gray-900 border border-cyan-500/20 rounded-2xl p-6">
         <h2 className="text-lg font-bold text-white mb-4">
           Upload Photo or Video
