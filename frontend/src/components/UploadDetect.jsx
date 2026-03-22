@@ -1,25 +1,6 @@
-import { useState } from "react";
-import axios from "axios";
-
-const compressImage = (file) => {
-  return new Promise((resolve) => {
-    const canvas = document.createElement("canvas");
-    const img = new window.Image();
-    img.onload = () => {
-      let width = img.width;
-      let height = img.height;
-      if (width > 640) {
-        height = (640 / width) * height;
-        width = 640;
-      }
-      canvas.width = width;
-      canvas.height = height;
-      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-      canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.7);
-    };
-    img.src = URL.createObjectURL(file);
-  });
-};
+import { useState, useRef } from "react";
+import * as cocoSsd from "@tensorflow-models/coco-ssd";
+import "@tensorflow/tfjs";
 
 export default function UploadDetect() {
   const [result, setResult] = useState(null);
@@ -28,6 +9,58 @@ export default function UploadDetect() {
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
   const [fileType, setFileType] = useState("");
+  const imgRef = useRef(null);
+  const canvasRef = useRef(null);
+
+  const getDensityLevel = (count) => {
+    if (count < 10) return "Low";
+    if (count < 30) return "Medium";
+    if (count < 60) return "High";
+    return "Critical";
+  };
+
+  const getRecommendation = (density) => {
+    if (density === "Critical") return "Danger! Evacuate immediately and call emergency services.";
+    if (density === "High") return "High crowd detected. Avoid this area and use alternate routes.";
+    if (density === "Medium") return "Moderate crowd. Stay alert and maintain safe distance.";
+    return "Area is safe. Normal crowd levels detected.";
+  };
+
+  const detectPeople = async (imageElement) => {
+    const model = await cocoSsd.load();
+    const predictions = await model.detect(imageElement);
+    const people = predictions.filter(p => p.class === "person" && p.score > 0.5);
+
+    const canvas = canvasRef.current;
+    canvas.width = imageElement.width;
+    canvas.height = imageElement.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(imageElement, 0, 0);
+
+    people.forEach(person => {
+      const [x, y, w, h] = person.bbox;
+      ctx.strokeStyle = "#00ffff";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x, y, w, h);
+      ctx.fillStyle = "#00ffff";
+      ctx.font = "bold 16px Arial";
+      ctx.fillText(`${Math.round(person.score * 100)}%`, x, y - 8);
+    });
+
+    ctx.fillStyle = "#00ff00";
+    ctx.font = "bold 24px Arial";
+    ctx.fillText(`People: ${people.length}`, 20, 45);
+
+    const annotated = canvas.toDataURL("image/jpeg");
+    const density = getDensityLevel(people.length);
+
+    return {
+      people_count: people.length,
+      density,
+      recommendation: getRecommendation(density),
+      annotated_image: annotated.split(",")[1]
+    };
+  };
 
   const handleUpload = async (e) => {
     const file = e.target.files[0];
@@ -37,56 +70,36 @@ export default function UploadDetect() {
     setResult(null);
     setFileName(file.name);
     setFileType(file.type);
-    setPreview(URL.createObjectURL(file));
     setLoading(true);
 
     try {
-      let fileToSend = file;
+      let imageElement;
 
       if (file.type.startsWith("video/")) {
-        fileToSend = await extractFrameFromVideo(file);
-        if (!fileToSend) {
-          setError("Could not extract frame from video. Try a shorter video.");
-          setLoading(false);
-          return;
-        }
+        imageElement = await extractFrameFromVideo(file);
+        setPreview(URL.createObjectURL(file));
       } else {
-        fileToSend = await compressImage(file);
+        imageElement = await loadImage(file);
+        setPreview(URL.createObjectURL(file));
       }
 
-      const formData = new FormData();
-      formData.append("file", fileToSend, "upload.jpg");
+      const detectionResult = await detectPeople(imageElement);
+      setResult(detectionResult);
 
-      const res = await axios.post(
-        "https://crowd-backend-0m8x.onrender.com/api/crowd/detect/image",
-        formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-          timeout: 30000
-        }
-      );
-
-      setResult(res.data);
-
-      if (
-        res.data.density === "High" ||
-        res.data.density === "Critical"
-      ) {
-        await axios.post(
-          "https://crowd-backend-0m8x.onrender.com/api/alerts/add",
-          {
-            people_count: res.data.people_count,
-            density: res.data.density,
-            source: file.type.startsWith("video/") ? "Video Upload" : "Photo Upload"
-          }
-        );
-      }
     } catch (err) {
-      console.error("Upload error:", err);
-      setError("Detection failed. Make sure backend is running.");
+      console.error("Detection error:", err);
+      setError("Detection failed. Please try again.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadImage = (file) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.src = URL.createObjectURL(file);
+    });
   };
 
   const extractFrameFromVideo = (videoFile) => {
@@ -99,11 +112,10 @@ export default function UploadDetect() {
       video.onloadeddata = () => {
         canvas.width = video.videoWidth || 640;
         canvas.height = video.videoHeight || 480;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob((blob) => {
-          resolve(blob);
-        }, "image/jpeg", 0.7);
+        canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.src = canvas.toDataURL("image/jpeg");
       };
       video.onerror = () => resolve(null);
     });
@@ -158,6 +170,7 @@ export default function UploadDetect() {
               />
             ) : (
               <img
+                ref={imgRef}
                 src={preview}
                 alt="Preview"
                 className="w-full rounded-xl border border-gray-700 max-h-64 object-cover"
@@ -165,6 +178,7 @@ export default function UploadDetect() {
             )}
           </div>
         )}
+        <canvas ref={canvasRef} className="hidden" />
       </div>
 
       <div className="bg-gray-900 border border-cyan-500/20 rounded-2xl p-6">
@@ -176,12 +190,10 @@ export default function UploadDetect() {
           <div className="text-center py-12">
             <p className="text-4xl mb-4 animate-bounce">🤖</p>
             <p className="text-cyan-400 animate-pulse font-bold text-lg">
-              Analyzing with OpenCV...
+              AI Detecting People...
             </p>
             <p className="text-gray-500 text-xs mt-2">
-              {fileType.startsWith("video/")
-                ? "Extracting frame from video then detecting..."
-                : "Counting people in your image..."}
+              Running on your browser — no backend needed!
             </p>
           </div>
         )}
