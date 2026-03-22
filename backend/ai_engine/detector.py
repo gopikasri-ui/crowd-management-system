@@ -31,71 +31,74 @@ def detect_from_image_bytes(image_bytes):
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         img_array = np.array(image)
         img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-
-        count = 0
         annotated = img_bgr.copy()
+        count = 0
 
+        # Resize for faster processing
+        height, width = img_bgr.shape[:2]
+        if width > 800:
+            scale = 800 / width
+            img_bgr = cv2.resize(img_bgr, (int(width * scale), int(height * scale)))
+            annotated = img_bgr.copy()
+
+        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+
+        # ✅ Try YOLO first
         try:
             from ultralytics import YOLO
             model = YOLO("yolov8n.pt")
-            results = model(img_bgr, classes=[0], conf=0.5, verbose=False)
+            results = model(img_bgr, classes=[0], conf=0.4, verbose=False)
             for r in results:
                 count = len(r.boxes)
                 for box in r.boxes:
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     conf = float(box.conf[0])
                     cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 255), 2)
-                    cv2.putText(
-                        annotated,
-                        f"{int(conf * 100)}%",
-                        (x1, y1 - 8),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        (0, 255, 255),
-                        1
-                    )
+                    cv2.putText(annotated, f"{int(conf*100)}%",
+                        (x1, y1-8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,255), 1)
+
         except Exception as yolo_err:
-            print(f"YOLO not available: {yolo_err}")
-            # ✅ FIXED HOG - less false detections
-            hog = cv2.HOGDescriptor()
-            hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+            print(f"YOLO failed: {yolo_err}, using face+body detection")
 
-            # Resize image - HOG works better on smaller images
-            height, width = img_bgr.shape[:2]
-            scale = 1.0
-            if width > 800:
-                scale = 800 / width
-                img_bgr = cv2.resize(img_bgr, (int(width * scale), int(height * scale)))
-                annotated = img_bgr.copy()
-
-            gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-            boxes, weights = hog.detectMultiScale(
-                gray,
-                winStride=(12, 12),   # ✅ bigger stride = less false detections
-                padding=(8, 8),
-                scale=1.08,           # ✅ less scales = faster + accurate
-                finalThreshold=2      # ✅ higher threshold = removes false boxes
+            # ✅ Face detection (works great for close-up webcam)
+            face_cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            )
+            faces = face_cascade.detectMultiScale(
+                gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
             )
 
-            # ✅ Filter only high confidence detections
-            real_boxes = []
-            for i, (x, y, w, h) in enumerate(boxes):
-                if len(weights) > i and weights[i] > 0.5:
-                    real_boxes.append((x, y, w, h))
+            # ✅ Upper body detection (works for sitting people)
+            upper_cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_upperbody.xml'
+            )
+            upper = upper_cascade.detectMultiScale(
+                gray, scaleFactor=1.1, minNeighbors=3, minSize=(60, 60)
+            )
 
-            count = len(real_boxes)
-            for (x, y, w, h) in real_boxes:
-                cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            # Draw face boxes
+            face_regions = []
+            for (x, y, w, h) in faces:
+                cv2.rectangle(annotated, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                cv2.putText(annotated, "Person", (x, y-8),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
+                face_regions.append((x, y, w, h))
 
-        cv2.putText(
-            annotated,
-            f"People: {count}",
-            (20, 45),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1.2,
-            (0, 255, 0),
-            3
-        )
+            # Add upper body detections not already covered by face
+            for (x, y, w, h) in upper:
+                already_counted = False
+                for (fx, fy, fw, fh) in face_regions:
+                    if abs(x - fx) < 50 and abs(y - fy) < 100:
+                        already_counted = True
+                        break
+                if not already_counted:
+                    cv2.rectangle(annotated, (x, y), (x+w, y+h), (0, 200, 255), 2)
+                    face_regions.append((x, y, w, h))
+
+            count = len(face_regions)
+
+        cv2.putText(annotated, f"People: {count}",
+            (20, 45), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0), 3)
 
         _, buffer = cv2.imencode(".jpg", annotated)
         encoded = base64.b64encode(buffer).decode("utf-8")
@@ -110,7 +113,7 @@ def detect_from_image_bytes(image_bytes):
 
     except Exception as e:
         print(f"Detection error: {e}")
-        count = 0  # ✅ Return 0 instead of random number on error
+        count = 0
         density = get_density_level(count)
         return {
             "count": count,
