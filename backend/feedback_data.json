@@ -1,0 +1,29 @@
+[
+  {
+    "id": 1,
+    "name": "gopikasri",
+    "email": "GOPIKASRI268@GMAIL.COM",
+    "rating": 5,
+    "message": "good",
+    "timestamp": 1774091127.785803,
+    "date": "2026-03-21 16:35:27"
+  },
+  {
+    "id": 2,
+    "name": "hello",
+    "email": "hello@gmail.com",
+    "rating": 4,
+    "message": "perfect",
+    "timestamp": 1774091178.7720597,
+    "date": "2026-03-21 16:36:18"
+  },
+  {
+    "id": 3,
+    "name": "hi",
+    "email": "hi@gmail.com",
+    "rating": 5,
+    "message": "nice",
+    "timestamp": 1774108195.2790546,
+    "date": "2026-03-21 21:19:55"
+  }
+]
