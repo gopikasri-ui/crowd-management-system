@@ -2,6 +2,7 @@ import random
 import base64
 import io
 
+
 def get_density_level(count):
     if count < 10:
         return "Low"
@@ -12,6 +13,7 @@ def get_density_level(count):
     else:
         return "Critical"
 
+
 def get_recommendation(density):
     if density == "Critical":
         return "Danger! Evacuate immediately and call emergency services."
@@ -21,6 +23,7 @@ def get_recommendation(density):
         return "Moderate crowd. Stay alert and maintain safe distance."
     else:
         return "Area is safe. Normal crowd levels detected."
+
 
 def detect_from_image_bytes(image_bytes):
     try:
@@ -34,7 +37,6 @@ def detect_from_image_bytes(image_bytes):
         annotated = img_bgr.copy()
         count = 0
 
-        # Resize for faster processing
         height, width = img_bgr.shape[:2]
         if width > 800:
             scale = 800 / width
@@ -43,7 +45,6 @@ def detect_from_image_bytes(image_bytes):
 
         gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
 
-        # ✅ Try YOLO first
         try:
             from ultralytics import YOLO
             model = YOLO("yolov8n.pt")
@@ -54,37 +55,54 @@ def detect_from_image_bytes(image_bytes):
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     conf = float(box.conf[0])
                     cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 255), 2)
-                    cv2.putText(annotated, f"{int(conf*100)}%",
-                        (x1, y1-8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,255), 1)
+                    cv2.putText(
+                        annotated,
+                        f"{int(conf * 100)}%",
+                        (x1, y1 - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 255, 255),
+                        1
+                    )
 
         except Exception as yolo_err:
             print(f"YOLO failed: {yolo_err}, using face+body detection")
 
-            # ✅ Face detection (works great for close-up webcam)
             face_cascade = cv2.CascadeClassifier(
                 cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
             )
             faces = face_cascade.detectMultiScale(
-                gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
+                gray,
+                scaleFactor=1.1,
+                minNeighbors=5,
+                minSize=(30, 30)
             )
 
-            # ✅ Upper body detection (works for sitting people)
             upper_cascade = cv2.CascadeClassifier(
                 cv2.data.haarcascades + 'haarcascade_upperbody.xml'
             )
             upper = upper_cascade.detectMultiScale(
-                gray, scaleFactor=1.1, minNeighbors=3, minSize=(60, 60)
+                gray,
+                scaleFactor=1.1,
+                minNeighbors=3,
+                minSize=(60, 60)
             )
 
-            # Draw face boxes
             face_regions = []
+
             for (x, y, w, h) in faces:
-                cv2.rectangle(annotated, (x, y), (x+w, y+h), (0, 255, 0), 2)
-                cv2.putText(annotated, "Person", (x, y-8),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
+                cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.putText(
+                    annotated,
+                    "Person",
+                    (x, y - 8),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 255, 0),
+                    1
+                )
                 face_regions.append((x, y, w, h))
 
-            # Add upper body detections not already covered by face
             for (x, y, w, h) in upper:
                 already_counted = False
                 for (fx, fy, fw, fh) in face_regions:
@@ -92,13 +110,20 @@ def detect_from_image_bytes(image_bytes):
                         already_counted = True
                         break
                 if not already_counted:
-                    cv2.rectangle(annotated, (x, y), (x+w, y+h), (0, 200, 255), 2)
+                    cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 200, 255), 2)
                     face_regions.append((x, y, w, h))
 
             count = len(face_regions)
 
-        cv2.putText(annotated, f"People: {count}",
-            (20, 45), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0), 3)
+        cv2.putText(
+            annotated,
+            f"People: {count}",
+            (20, 45),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.2,
+            (0, 255, 0),
+            3
+        )
 
         _, buffer = cv2.imencode(".jpg", annotated)
         encoded = base64.b64encode(buffer).decode("utf-8")
