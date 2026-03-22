@@ -79,7 +79,7 @@ export default function AIChat() {
 
     try {
       const res = await axios.post(
-        "http://localhost:8000/api/chat/message",
+        "https://crowd-backend-0m8x.onrender.com/api/chat/message",
         { message: messageText }
       );
       setMessages((prev) => [

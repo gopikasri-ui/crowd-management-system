@@ -9,8 +9,8 @@ export function useCrowdData() {
   const fetchData = async () => {
     try {
       const [crowdRes, alertsRes] = await Promise.all([
-        axios.get("http://localhost:8000/api/crowd/live"),
-        axios.get("http://localhost:8000/api/alerts/live"),
+        axios.get("https://crowd-backend-0m8x.onrender.com/api/crowd/live"),
+        axios.get("https://crowd-backend-0m8x.onrender.com/api/alerts/live"),
       ]);
       setData(crowdRes.data);
       setAlerts(alertsRes.data.alerts);

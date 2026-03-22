@@ -10,8 +10,8 @@ export default function Alerts() {
 
   const fetchAll = async () => {
     try {
-      const r1 = await axios.get('http://localhost:8000/api/alerts/live');
-      const r2 = await axios.get('http://localhost:8000/api/alerts/map-history');
+      const r1 = await axios.get('https://crowd-backend-0m8x.onrender.com/api/alerts/live');
+      const r2 = await axios.get('https://crowd-backend-0m8x.onrender.com/api/alerts/map-history');
       setAlerts(r1.data.alerts || []);
       setMapHistory(r2.data.searches || []);
     } catch(e) { console.error(e); }
@@ -19,12 +19,12 @@ export default function Alerts() {
   };
 
   const clearDetection = async () => {
-    await axios.delete('http://localhost:8000/api/alerts/clear');
+    await axios.delete('https://crowd-backend-0m8x.onrender.com/api/alerts/clear');
     fetchAll();
   };
 
   const clearMap = async () => {
-    await axios.delete('http://localhost:8000/api/alerts/map-history/clear');
+    await axios.delete('https://crowd-backend-0m8x.onrender.com/api/alerts/map-history/clear');
     fetchAll();
   };
 

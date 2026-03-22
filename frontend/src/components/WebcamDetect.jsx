@@ -61,7 +61,7 @@ export default function WebcamDetect() {
         const formData = new FormData();
         formData.append("file", blob, "webcam.jpg");
         const res = await axios.post(
-          "http://localhost:8000/api/crowd/detect/image",
+          "https://crowd-backend-0m8x.onrender.com/api/crowd/detect/image",
           formData,
           { headers: { "Content-Type": "multipart/form-data" } }
         );
@@ -71,7 +71,7 @@ export default function WebcamDetect() {
           res.data.density === "Critical"
         ) {
           await axios.post(
-            "http://localhost:8000/api/alerts/add",
+            "https://crowd-backend-0m8x.onrender.com/api/alerts/add",
             {
               people_count: res.data.people_count,
               density: res.data.density,

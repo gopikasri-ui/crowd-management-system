@@ -15,8 +15,8 @@ export default function Feedback() {
   const fetchFeedbacks = async () => {
     try {
       const [fbRes, statsRes] = await Promise.all([
-        axios.get("http://localhost:8000/api/feedback/all"),
-        axios.get("http://localhost:8000/api/feedback/stats"),
+        axios.get("https://crowd-backend-0m8x.onrender.com/api/feedback/all"),
+        axios.get("https://crowd-backend-0m8x.onrender.com/api/feedback/stats"),
       ]);
       setFeedbacks(fbRes.data.feedbacks || []);
       setStats(statsRes.data);
@@ -34,7 +34,7 @@ export default function Feedback() {
     setLoading(true);
     try {
       await axios.post(
-        "http://localhost:8000/api/feedback/submit",
+        "https://crowd-backend-0m8x.onrender.com/api/feedback/submit",
         form
       );
       setSubmitted(true);

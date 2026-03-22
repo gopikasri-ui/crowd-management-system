@@ -50,7 +50,7 @@ export default function MapView() {
   useEffect(() => {
     const fetchHeatmap = async () => {
       try {
-        const res = await axios.get('http://localhost:8000/api/crowd/heatmap');
+        const res = await axios.get('https://crowd-backend-0m8x.onrender.com/api/crowd/heatmap');
         setPoints(res.data.points);
         setLoading(false);
       } catch { setLoading(false); }
@@ -81,7 +81,7 @@ export default function MapView() {
       const result = await geocode(searchQuery);
       if (!result) { alert('Location not found. Try a more specific name.'); setSearching(false); return; }
       setSearchResult(result);
-      const densityRes = await axios.post('http://localhost:8000/api/crowd/heatmap/location', {
+      const densityRes = await axios.post('https://crowd-backend-0m8x.onrender.com/api/crowd/heatmap/location', {
         lat: result.lat,
         lng: result.lng,
         location_name: searchQuery.toLowerCase()
@@ -89,7 +89,7 @@ export default function MapView() {
       setSearchDensity(densityRes.data);
       const newPoints = densityRes.data.points.map((p) => ({ ...p, isSearch: true }));
       setPoints((prev) => [...prev.filter((p) => !p.isSearch), ...newPoints]);
-      await axios.post('http://localhost:8000/api/alerts/map-search', {
+      await axios.post('https://crowd-backend-0m8x.onrender.com/api/alerts/map-search', {
         location: result.name,
         lat: result.lat,
         lng: result.lng,
@@ -129,7 +129,7 @@ export default function MapView() {
         const step = steps[i];
         const stepLat = step.maneuver.location[1];
         const stepLng = step.maneuver.location[0];
-        const densityRes = await axios.post('http://localhost:8000/api/crowd/heatmap/location', {
+        const densityRes = await axios.post('https://crowd-backend-0m8x.onrender.com/api/crowd/heatmap/location', {
           lat: stepLat,
           lng: stepLng,
           location_name: step.name || 'road'

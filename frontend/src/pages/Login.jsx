@@ -31,7 +31,7 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await axios.post(
-        "http://localhost:8000/api/auth/login",
+        "https://crowd-backend-0m8x.onrender.com/api/auth/login",
         loginForm
       );
       setPhone(res.data.phone);
@@ -51,7 +51,7 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await axios.post(
-        "http://localhost:8000/api/auth/signup",
+        "https://crowd-backend-0m8x.onrender.com/api/auth/signup",
         signupForm
       );
       setPhone(signupForm.phone);
@@ -71,7 +71,7 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await axios.post(
-        "http://localhost:8000/api/auth/verify-otp",
+        "https://crowd-backend-0m8x.onrender.com/api/auth/verify-otp",
         { phone, otp }
       );
       loginDirect(res.data);

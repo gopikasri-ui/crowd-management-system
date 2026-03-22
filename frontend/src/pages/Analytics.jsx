@@ -47,7 +47,7 @@ export default function Analytics() {
 
   const fetchLive = async () => {
     try {
-      const r = await axios.get('http://localhost:8000/api/crowd/live');
+      const r = await axios.get('https://crowd-backend-0m8x.onrender.com/api/crowd/live');
       setLiveCount(r.data.people_count);
       setLive(r.data);
     } catch (e) { console.error(e); }
@@ -55,7 +55,7 @@ export default function Analytics() {
 
   const fetchTrends = async () => {
     try {
-      const r = await axios.get('http://localhost:8000/api/crowd/trends');
+      const r = await axios.get('https://crowd-backend-0m8x.onrender.com/api/crowd/trends');
       if (!r.data.labels || r.data.labels.length === 0) {
         setNoData(true);
         return;
@@ -224,7 +224,7 @@ export default function Analytics() {
 
         {trends?.locations && trends.locations.length > 0 && (
           <div className='bg-gray-900 border border-cyan-500/20 rounded-2xl p-6'>
-            <h2 className='text-lg font-bold text-white mb-4'>Your Recent Searches — Exact Density</h2>
+            <h2 className='text-lg font-bold text-white mb-4'>Your Recent Searches ï¿½ Exact Density</h2>
             <div className='space-y-2'>
               {trends.locations.map((loc, i) => (
                 <div key={i} className='flex items-center justify-between bg-gray-800 rounded-xl px-4 py-3'>
