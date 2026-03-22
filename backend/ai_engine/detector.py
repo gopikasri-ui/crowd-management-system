@@ -1,4 +1,3 @@
-import random
 import base64
 import io
 
@@ -30,6 +29,12 @@ def detect_from_image_bytes(image_bytes):
         import cv2
         import numpy as np
         from PIL import Image
+
+        try:
+            from pillow_heif import register_heif_opener
+            register_heif_opener()
+        except Exception:
+            pass
 
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         img_array = np.array(image)
