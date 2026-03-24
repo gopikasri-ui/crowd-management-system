@@ -1,7 +1,7 @@
 import Navbar from '../components/Navbar';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, useMap, Marker } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
 function FlyTo({ coords }) {
@@ -26,7 +26,6 @@ export default function MapView() {
   const [searchQuery,   setSearchQuery]   = useState('');
   const [searchResult,  setSearchResult]  = useState(null);
   const [searchDensity, setSearchDensity] = useState(null);
-  const [userLocation,  setUserLocation]  = useState(null);
   const [searching,     setSearching]     = useState(false);
   const [mode,          setMode]          = useState('search');
   const [startPoint,    setStartPoint]    = useState('');
@@ -37,12 +36,6 @@ export default function MapView() {
   const [routeAlerts,   setRouteAlerts]   = useState([]);
   const [navigating,    setNavigating]    = useState(false);
   const [crowdAlongRoute, setCrowdAlongRoute] = useState([]);
-
-  useEffect(() => {
-    navigator.geolocation?.getCurrentPosition((pos) => {
-      setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-    });
-  }, []);
 
   const geocode = async (query) => {
     const res = await fetch(
@@ -261,7 +254,6 @@ export default function MapView() {
             { label:'Moderate (50-70%)', color:'bg-yellow-500' },
             { label:'High (70-85%)',     color:'bg-orange-500' },
             { label:'Critical (85%+)',   color:'bg-red-500'    },
-            { label:'You',               color:'bg-cyan-400'   },
             { label:'Route',             color:'bg-blue-500'   },
           ].map((item) => (
             <div key={item.label} className='flex items-center gap-2'>
@@ -286,12 +278,6 @@ export default function MapView() {
 
             {searchResult && mode === 'search' && <FlyTo coords={searchResult} />}
             {startCoords  && mode === 'navigate' && <FlyTo coords={startCoords} />}
-
-            {userLocation && (
-              <CircleMarker center={[userLocation.lat, userLocation.lng]} radius={12} fillColor='#00f5ff' fillOpacity={1} color='#fff' weight={3}>
-                <Popup><div style={{color:'#000'}}><strong>Your Location</strong></div></Popup>
-              </CircleMarker>
-            )}
 
             {searchResult && mode === 'search' && (
               <CircleMarker center={[searchResult.lat, searchResult.lng]} radius={18} fillColor='#a855f7' fillOpacity={0.9} color='#fff' weight={2}>
