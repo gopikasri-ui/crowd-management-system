@@ -1,37 +1,13 @@
 import Navbar from '../components/Navbar';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, useMap, Marker } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-
-// ── Chennai bounding box — only dots inside this area are shown ────────────
-const CHENNAI_BOUNDS = {
-  minLat: 12.85,
-  maxLat: 13.25,
-  minLng: 79.95,
-  maxLng: 80.45,
-};
-
-function isInsideChennai(lat, lng) {
-  return (
-    lat >= CHENNAI_BOUNDS.minLat &&
-    lat <= CHENNAI_BOUNDS.maxLat &&
-    lng >= CHENNAI_BOUNDS.minLng &&
-    lng <= CHENNAI_BOUNDS.maxLng
-  );
-}
-
-function densityColor(w) {
-  if (w > 0.75) return '#ef4444';
-  if (w > 0.5)  return '#f97316';
-  if (w > 0.25) return '#eab308';
-  return '#22c55e';
-}
 
 function FlyTo({ coords }) {
   const map = useMap();
   useEffect(() => {
-    if (coords) map.flyTo([coords.lat, coords.lng], 16, { duration: 1.5 });
+    if (coords) map.flyTo([coords.lat, coords.lng], 15, { duration: 1.5 });
   }, [coords, map]);
   return null;
 }
@@ -47,52 +23,38 @@ function speakAlert(text) {
 }
 
 export default function MapView() {
-  const [points,        setPoints]        = useState([]);
-  const [searchQuery,   setSearchQuery]   = useState('');
-  const [searchResult,  setSearchResult]  = useState(null);
-  const [searchDensity, setSearchDensity] = useState(null);
-  const [userLocation,  setUserLocation]  = useState(null);
-  const [loading,       setLoading]       = useState(true);
-  const [searching,     setSearching]     = useState(false);
-  const [mode,          setMode]          = useState('search');
-  const [startPoint,    setStartPoint]    = useState('');
-  const [endPoint,      setEndPoint]      = useState('');
-  const [startCoords,   setStartCoords]   = useState(null);
-  const [endCoords,     setEndCoords]     = useState(null);
-  const [routePoints,   setRoutePoints]   = useState([]);
-  const [routeAlerts,   setRouteAlerts]   = useState([]);
-  const [navigating,    setNavigating]    = useState(false);
+  const [searchQuery,     setSearchQuery]     = useState('');
+  const [searchResult,    setSearchResult]    = useState(null);
+  const [searchDensity,   setSearchDensity]   = useState(null);
+  const [searching,       setSearching]       = useState(false);
+  const [mode,            setMode]            = useState('search');
+  const [startPoint,      setStartPoint]      = useState('');
+  const [endPoint,        setEndPoint]        = useState('');
+  const [startCoords,     setStartCoords]     = useState(null);
+  const [endCoords,       setEndCoords]       = useState(null);
+  const [routePoints,     setRoutePoints]     = useState([]);
+  const [routeAlerts,     setRouteAlerts]     = useState([]);
+  const [navigating,      setNavigating]      = useState(false);
   const [crowdAlongRoute, setCrowdAlongRoute] = useState([]);
 
-  useEffect(() => {
-    const fetchHeatmap = async () => {
-      try {
-        const res = await axios.get('https://crowd-backend-0m8x.onrender.com/api/crowd/heatmap');
-        // ── FIX: filter points to Chennai area only ──────────────────────
-        const chennaiOnly = (res.data.points || []).filter(
-          (p) => isInsideChennai(p.lat, p.lng)
-        );
-        setPoints(chennaiOnly);
-        setLoading(false);
-      } catch { setLoading(false); }
-    };
-    fetchHeatmap();
-    const interval = setInterval(fetchHeatmap, 5000);
-    navigator.geolocation?.getCurrentPosition((pos) => {
-      setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-    });
-    return () => clearInterval(interval);
-  }, []);
-
+  // Geocode: search anywhere, biased to Tamil Nadu / India
   const geocode = async (query) => {
-    const res = await fetch(
+    const url =
       'https://nominatim.openstreetmap.org/search?q=' +
       encodeURIComponent(query) +
-      '&format=json&limit=1&addressdetails=1'
-    );
+      '&format=json&limit=5&addressdetails=1&countrycodes=in';
+
+    const res  = await fetch(url);
     const data = await res.json();
     if (!data.length) return null;
-    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), name: data[0].display_name };
+
+    // Pick the result with highest importance (Nominatim default ranking)
+    const best = data[0];
+    return {
+      lat:  parseFloat(best.lat),
+      lng:  parseFloat(best.lon),
+      name: best.display_name,
+    };
   };
 
   const handleSearch = async () => {
@@ -100,18 +62,17 @@ export default function MapView() {
     setSearching(true);
     try {
       const result = await geocode(searchQuery);
-      if (!result) { alert('Location not found. Try a more specific name.'); setSearching(false); return; }
+      if (!result) {
+        alert('Location not found. Try a more specific name.');
+        setSearching(false);
+        return;
+      }
       setSearchResult(result);
       const densityRes = await axios.post(
         'https://crowd-backend-0m8x.onrender.com/api/crowd/heatmap/location',
         { lat: result.lat, lng: result.lng, location_name: searchQuery.toLowerCase() }
       );
       setSearchDensity(densityRes.data);
-      // ── FIX: also filter search points to Chennai ────────────────────
-      const newPoints = (densityRes.data.points || [])
-        .filter((p) => isInsideChennai(p.lat, p.lng))
-        .map((p) => ({ ...p, isSearch: true }));
-      setPoints((prev) => [...prev.filter((p) => !p.isSearch), ...newPoints]);
       await axios.post('https://crowd-backend-0m8x.onrender.com/api/alerts/map-search', {
         location:        result.name,
         lat:             result.lat,
@@ -127,12 +88,18 @@ export default function MapView() {
       else if (signal < 85) voiceText = 'Warning! ' + searchQuery + ' has high crowd density of ' + Math.round(signal) + ' percent. Consider alternate route.';
       else                  voiceText = 'Danger! Critical crowd at ' + searchQuery + '. Density is ' + Math.round(signal) + ' percent. Avoid this area immediately.';
       speakAlert(voiceText);
-    } catch { alert('Search failed. Try again.'); }
-    finally { setSearching(false); }
+    } catch {
+      alert('Search failed. Try again.');
+    } finally {
+      setSearching(false);
+    }
   };
 
   const handleNavigate = async () => {
-    if (!startPoint.trim() || !endPoint.trim()) { alert('Please enter both start and end points'); return; }
+    if (!startPoint.trim() || !endPoint.trim()) {
+      alert('Please enter both start and end points');
+      return;
+    }
     setNavigating(true);
     try {
       const [start, end] = await Promise.all([geocode(startPoint), geocode(endPoint)]);
@@ -181,8 +148,12 @@ export default function MapView() {
         voiceText += 'Good news! Your route is clear with no major crowd density detected. Have a safe journey!';
       }
       speakAlert(voiceText);
-    } catch (err) { console.error(err); alert('Navigation failed. Please try again.'); }
-    finally { setNavigating(false); }
+    } catch (err) {
+      console.error(err);
+      alert('Navigation failed. Please try again.');
+    } finally {
+      setNavigating(false);
+    }
   };
 
   const getDensityBorder = (density) => {
@@ -219,7 +190,7 @@ export default function MapView() {
               type='text' value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder='Search any place, road, area... e.g. Anna Nagar 2nd Street Chennai'
+              placeholder='Search any place... e.g. Anna Nagar, T Nagar, Coimbatore, Madurai'
               className='flex-1 bg-gray-900 border border-gray-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-cyan-500'
             />
             <button onClick={handleSearch} disabled={searching}
@@ -236,13 +207,13 @@ export default function MapView() {
               <div className='flex gap-3 items-center'>
                 <div className='w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0'>A</div>
                 <input type='text' value={startPoint} onChange={(e) => setStartPoint(e.target.value)}
-                  placeholder='Start point e.g. Tambaram Chennai'
+                  placeholder='Start point e.g. Tambaram'
                   className='flex-1 bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-green-500' />
               </div>
               <div className='flex gap-3 items-center'>
                 <div className='w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0'>B</div>
                 <input type='text' value={endPoint} onChange={(e) => setEndPoint(e.target.value)}
-                  placeholder='End point e.g. Marina Beach Chennai'
+                  placeholder='End point e.g. Marina Beach'
                   className='flex-1 bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-red-500' />
               </div>
               <button onClick={handleNavigate} disabled={navigating}
@@ -306,7 +277,6 @@ export default function MapView() {
             { label:'Moderate (50-70%)', color:'bg-yellow-500' },
             { label:'High (70-85%)',     color:'bg-orange-500' },
             { label:'Critical (85%+)',   color:'bg-red-500'    },
-            { label:'You',               color:'bg-cyan-400'   },
             { label:'Route',             color:'bg-blue-500'   },
           ].map((item) => (
             <div key={item.label} className='flex items-center gap-2'>
@@ -317,88 +287,64 @@ export default function MapView() {
         </div>
 
         <div className='rounded-2xl overflow-hidden border border-cyan-500/20' style={{height:'550px'}}>
-          {loading ? (
-            <div className='w-full h-full bg-gray-900 flex items-center justify-center'>
-              <p className='text-cyan-400 animate-pulse'>Loading map...</p>
-            </div>
-          ) : (
-            <MapContainer
-              center={[13.0827, 80.2707]}
-              zoom={13}
-              style={{height:'100%', width:'100%'}}
-              maxBounds={[[12.85, 79.95], [13.25, 80.45]]}
-              maxBoundsViscosity={0.8}
-            >
-              <TileLayer
-                attribution='OpenStreetMap'
-                url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-              />
+          <MapContainer
+            center={[13.0827, 80.2707]}
+            zoom={12}
+            style={{height:'100%', width:'100%'}}
+          >
+            <TileLayer
+              attribution='OpenStreetMap'
+              url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+            />
 
-              {searchResult && mode === 'search' && <FlyTo coords={searchResult} />}
-              {startCoords  && mode === 'navigate' && <FlyTo coords={startCoords} />}
+            {searchResult && mode === 'search' && <FlyTo coords={searchResult} />}
+            {startCoords  && mode === 'navigate' && <FlyTo coords={startCoords} />}
 
-              {userLocation && (
-                <CircleMarker center={[userLocation.lat, userLocation.lng]} radius={12} fillColor='#00f5ff' fillOpacity={1} color='#fff' weight={3}>
-                  <Popup><div style={{color:'#000'}}><strong>Your Location</strong></div></Popup>
-                </CircleMarker>
-              )}
+            {searchResult && mode === 'search' && (
+              <CircleMarker
+                center={[searchResult.lat, searchResult.lng]}
+                radius={18} fillColor='#a855f7' fillOpacity={0.9} color='#fff' weight={2}
+              >
+                <Popup>
+                  <div style={{color:'#000', maxWidth:'200px'}}>
+                    <strong>Searched Location</strong><br/>
+                    <span style={{fontSize:'11px'}}>{searchResult.name?.substring(0, 80)}</span><br/>
+                    {searchDensity && <strong>Density: {searchDensity.overall_density} ({searchDensity.signal_strength}%)</strong>}
+                  </div>
+                </Popup>
+              </CircleMarker>
+            )}
 
-              {searchResult && mode === 'search' && (
-                <CircleMarker center={[searchResult.lat, searchResult.lng]} radius={18} fillColor='#a855f7' fillOpacity={0.9} color='#fff' weight={2}>
-                  <Popup>
-                    <div style={{color:'#000', maxWidth:'200px'}}>
-                      <strong>Searched Location</strong><br/>
-                      <span style={{fontSize:'11px'}}>{searchResult.name?.substring(0, 60)}</span><br/>
-                      {searchDensity && <strong>Density: {searchDensity.overall_density} ({searchDensity.signal_strength}%)</strong>}
-                    </div>
-                  </Popup>
-                </CircleMarker>
-              )}
+            {startCoords && (
+              <CircleMarker center={[startCoords.lat, startCoords.lng]} radius={14} fillColor='#22c55e' fillOpacity={1} color='#fff' weight={2}>
+                <Popup><div style={{color:'#000'}}><strong>Start: {startCoords.name?.substring(0, 50)}</strong></div></Popup>
+              </CircleMarker>
+            )}
 
-              {startCoords && (
-                <CircleMarker center={[startCoords.lat, startCoords.lng]} radius={14} fillColor='#22c55e' fillOpacity={1} color='#fff' weight={2}>
-                  <Popup><div style={{color:'#000'}}><strong>Start: {startCoords.name?.substring(0, 40)}</strong></div></Popup>
-                </CircleMarker>
-              )}
+            {endCoords && (
+              <CircleMarker center={[endCoords.lat, endCoords.lng]} radius={14} fillColor='#ef4444' fillOpacity={1} color='#fff' weight={2}>
+                <Popup><div style={{color:'#000'}}><strong>End: {endCoords.name?.substring(0, 50)}</strong></div></Popup>
+              </CircleMarker>
+            )}
 
-              {endCoords && (
-                <CircleMarker center={[endCoords.lat, endCoords.lng]} radius={14} fillColor='#ef4444' fillOpacity={1} color='#fff' weight={2}>
-                  <Popup><div style={{color:'#000'}}><strong>End: {endCoords.name?.substring(0, 40)}</strong></div></Popup>
-                </CircleMarker>
-              )}
+            {routePoints.length > 0 && (
+              <Polyline positions={routePoints} color='#3b82f6' weight={5} opacity={0.8} />
+            )}
 
-              {routePoints.length > 0 && (
-                <Polyline positions={routePoints} color='#3b82f6' weight={5} opacity={0.8} />
-              )}
+            {crowdAlongRoute.map((cp, i) => (
+              <CircleMarker key={i} center={[cp.lat, cp.lng]}
+                radius={cp.signal > 70 ? 14 : 8}
+                fillColor={cp.signal >= 85 ? '#ef4444' : cp.signal >= 70 ? '#f97316' : cp.signal >= 50 ? '#eab308' : '#22c55e'}
+                fillOpacity={0.8} color='#fff' weight={1}>
+                <Popup>
+                  <div style={{color:'#000'}}>
+                    <strong>{cp.name}</strong><br/>Crowd: {cp.signal}%<br/>Status: {cp.density}
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ))}
 
-              {crowdAlongRoute.map((cp, i) => (
-                <CircleMarker key={i} center={[cp.lat, cp.lng]}
-                  radius={cp.signal > 70 ? 14 : 8}
-                  fillColor={cp.signal >= 85 ? '#ef4444' : cp.signal >= 70 ? '#f97316' : cp.signal >= 50 ? '#eab308' : '#22c55e'}
-                  fillOpacity={0.8} color='#fff' weight={1}>
-                  <Popup>
-                    <div style={{color:'#000'}}>
-                      <strong>{cp.name}</strong><br/>Crowd: {cp.signal}%<br/>Status: {cp.density}
-                    </div>
-                  </Popup>
-                </CircleMarker>
-              ))}
-
-              {/* ── FIX: only Chennai-filtered points rendered here ── */}
-              {points.map((point, i) => (
-                <CircleMarker key={i} center={[point.lat, point.lng]}
-                  radius={point.weight * 18}
-                  fillColor={densityColor(point.weight)}
-                  fillOpacity={0.5}
-                  color={densityColor(point.weight)}
-                  weight={1}>
-                  <Popup>
-                    <div style={{color:'#000'}}>Density: {(point.weight * 100).toFixed(0)}%</div>
-                  </Popup>
-                </CircleMarker>
-              ))}
-            </MapContainer>
-          )}
+          </MapContainer>
         </div>
 
         <div className='mt-4 bg-gray-900 border border-cyan-500/20 rounded-xl p-4'>
@@ -406,7 +352,7 @@ export default function MapView() {
           <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
             <div className='bg-gray-800 rounded-xl p-3'>
               <p className='text-xs font-bold text-white mb-1'>Search Place</p>
-              <p className='text-xs text-gray-400'>Type any place, road or area name. Works with small streets too. Voice alert tells you crowd level automatically.</p>
+              <p className='text-xs text-gray-400'>Type any place or road name. e.g. "Anna Nagar", "Coimbatore", "Madurai". Voice alert tells you crowd level automatically.</p>
             </div>
             <div className='bg-gray-800 rounded-xl p-3'>
               <p className='text-xs font-bold text-white mb-1'>Navigate</p>
